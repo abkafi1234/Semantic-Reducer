@@ -17,11 +17,14 @@ Example : https://colab.research.google.com/drive/1qZAxCif_shYCu1gIfUtU-zmDLVc4t
 - **Context-Aware Processing**  
   Uses Transformer models (default: `bert-base-multilingual-cased`) to capture contextual meaning instead of relying on static embeddings.
 
+  - **Language Agnostic**
+      Supports any language that has an Hugging Face Transformer.
+    
 - **Smart Vocabulary Reduction**  
   Automatically replaces rare or obscure words with their most frequent semantic equivalents.
 
 - **O(1) Inference Speed**  
-  After training, the BERT and FAISS pipeline is no longer required. Text reduction happens via a lightweight Python dictionary.
+  After training, the BERT and FAISS pipeline is no longer required. Text reduction is performed using a lightweight Python dictionary.
 
 - **Production Ready**  
   Supports saving and loading compiled reduction maps for deployment.
