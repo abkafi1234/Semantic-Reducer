@@ -8,6 +8,8 @@ By mapping semantically equivalent words (for example: *fast*, *quick*, *rapid*)
 
 After the initial processing stage, inference on new text requires only a dictionary lookup, enabling **O(1) runtime complexity**.
 
+Example : https://colab.research.google.com/drive/1qZAxCif_shYCu1gIfUtU-zmDLVc4tpEm?usp=sharing
+
 ---
 
 # Features
