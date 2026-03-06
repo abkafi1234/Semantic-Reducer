@@ -5,9 +5,32 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "semantic-reducer"
 version = "0.1.0"
+authors = [
+  { name="Your Name", email="your.email@example.com" },
+]
 description = "O(1) semantic vocabulary reduction using BERT and FAISS."
 readme = "README.md"
 requires-python = ">=3.8"
+license = { text = "MIT License" }
+keywords = ["nlp", "bert", "faiss", "embeddings", "text-reduction", "machine-learning"]
+
+# Classifiers help users filter and find your project on PyPI
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Text Processing :: Linguistic",
+]
+
+# The libraries installed automatically when someone pip installs your package
 dependencies = [
     "torch>=1.10.0",
     "numpy>=1.21.0",
@@ -15,3 +38,13 @@ dependencies = [
     "tqdm>=4.60.0",
     "transformers>=4.20.0"
 ]
+
+# These links will appear on the left sidebar of your PyPI page
+[project.urls]
+Homepage = "https://github.com/abkafi1234/Semantic-Reducer"
+Repository = "https://github.com/abkafi1234/Semantic-Reducer"
+"Bug Tracker" = "https://github.com/abkafi1234/Semantic-Reducer"
+
+# Explicitly tells the build tool to look inside the src/ folder for your code
+[tool.setuptools.packages.find]
+where = ["src"]
