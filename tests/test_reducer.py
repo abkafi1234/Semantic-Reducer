@@ -401,9 +401,8 @@ class TestRealisticPipeline:
         return vectors, counts, groups
 
     @pytest.fixture(scope="class")
-    @classmethod
-    def fitted(cls):
-        vectors, counts, groups = cls.planted()
+    def fitted(self):
+        vectors, counts, groups = self.planted()
         # Calibrate tau into the gap between within-group and cross-group
         # similarity, so the test measures the algorithm rather than a constant.
         probe = build_from_vectors(vectors, counts, threshold=0.99, anisotropy=True)
