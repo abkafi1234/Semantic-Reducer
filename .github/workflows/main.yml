@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.11", "3.12"]
+        python-version: ["3.9", "3.11", "3.12", "3.13", "3.14"]
 
     steps:
     - name: Checkout source code
@@ -31,10 +31,18 @@ jobs:
     # torch and transformers are NOT installed: they are imported lazily inside
     # SemanticReducer, so the clustering guarantees can be tested with numpy and
     # faiss-cpu alone. This keeps CI to seconds rather than pulling ~2 GB.
+    #
+    # regex IS installed, unlike torch/transformers: encoder.py imports it at
+    # module load time (top-level `import regex`, not inside a function), since
+    # the tokenizer needs it for every import of the package, not just encoding
+    # calls -- it is not lazy the way the two heavy ML dependencies are. Keep
+    # this list in sync with any other top-level (non-lazy) import in the
+    # package; a module that becomes eager here will break CI silently
+    # otherwise, exactly as this one did.
     - name: Install test dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install numpy faiss-cpu tqdm pytest
+        pip install numpy regex faiss-cpu tqdm pytest
 
     - name: Run property tests
       env:
