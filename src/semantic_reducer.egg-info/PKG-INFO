@@ -1,0 +1,380 @@
+Metadata-Version: 2.4
+Name: semantic-reducer
+Version: 0.4.0
+Summary: Corpus-grounded semantic vocabulary reduction with bounded semantic drift.
+Author-email: Md Abdullah Al Kafi <kafi.cse@diu.edu.bd>
+License: MIT License
+Project-URL: Homepage, https://github.com/abkafi1234/Semantic-Reducer
+Project-URL: Repository, https://github.com/abkafi1234/Semantic-Reducer
+Project-URL: Bug Tracker, https://github.com/abkafi1234/Semantic-Reducer
+Keywords: nlp,bert,faiss,embeddings,text-reduction,machine-learning
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Science/Research
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Topic :: Scientific/Engineering :: Artificial Intelligence
+Classifier: Topic :: Text Processing :: Linguistic
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: torch>=1.10.0
+Requires-Dist: numpy>=1.21.0
+Requires-Dist: tqdm>=4.60.0
+Requires-Dist: transformers>=4.20.0
+Requires-Dist: regex>=2023.0.0
+Provides-Extra: faiss
+Requires-Dist: faiss-cpu>=1.7.0; extra == "faiss"
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0; extra == "dev"
+Requires-Dist: faiss-cpu>=1.7.0; extra == "dev"
+Requires-Dist: build; extra == "dev"
+Dynamic: license-file
+
+# Semantic Reducer
+
+Collapse a corpus vocabulary into **semantic equivalence classes** learned from
+contextual embeddings, then normalize text with a dictionary lookup.
+
+Stemmers and lemmatizers need a hand-written rule set or an annotated treebank
+for every language. Semantic Reducer needs a corpus and an encoder that covers
+the language, so the same code path applies wherever a multilingual encoder
+reaches.
+
+```python
+from semantic_reducer import SemanticReducer
+
+reducer = SemanticReducer(threshold=0.6, linkage=1.0)
+reducer.fit(corpus)                      # list of sentences / short documents
+
+reducer.reduce("The rapid fox leaped.")
+reducer.save("my_corpus.json")
+```
+
+---
+
+## Usage, in detail
+
+A complete, real walkthrough — every output below is copied verbatim from an
+actual run (`bert-base-multilingual-cased`, CPU), not written by hand.
+
+### 1. Fit on a corpus
+
+```python
+from semantic_reducer import SemanticReducer
+
+corpus = [
+    "The doctor examined the patient carefully in the clinic.",
+    "A physician checked on the sick man at the hospital.",
+    "The nurse gave the patient medicine every morning.",
+    "She purchased a new car from the dealership yesterday.",
+    "He bought a used vehicle at a fair price last week.",
+    "The dealership sells cars, trucks, and motorcycles.",
+    "While the weather was cold, the children stayed inside.",
+    "Although it was cold outside, everyone remained indoors.",
+    "The dog ran quickly across the muddy yard.",
+    "The dog sprinted fast through the wet garden.",
+    "Scientists published a new study about climate change.",
+    "Researchers released a fresh report on global warming.",
+    "The company announced record profits this quarter.",
+    "The firm reported strong earnings for the period.",
+    "Students studied hard for the final examination.",
+    "Pupils prepared diligently for the final test.",
+]
+
+reducer = SemanticReducer(
+    model_name="bert-base-multilingual-cased",
+    threshold=0.55,
+    linkage=1.0,
+    min_count=1,     # this corpus is tiny; a real corpus should use the default (5)
+    device="cpu",
+)
+reducer.fit(corpus)
+```
+
+A real corpus should be at least a few thousand sentences — anisotropy
+correction is estimated from the corpus's own population of type vectors and
+is degenerate on a handful of types (the package warns you if this happens).
+16 sentences is used here only so the whole example is short enough to read.
+
+### 2. See what it actually did
+
+Never trust a merge without looking at it. `sample_merges()` returns every
+pair where the word actually moved:
+
+```python
+>>> reducer.sample_merges(30)
+[('She', 'He'), ('The', 'the'), ('While', 'Although'), ('firm', 'company'),
+ ('global', 'climate'), ('motorcycles', 'cars'), ('purchased', 'bought'),
+ ('released', 'published'), ('sprinted', 'ran'), ('study', 'report'),
+ ('through', 'across'), ('trucks', 'cars'), ('vehicle', 'car'),
+ ('warming', 'change'), ('wet', 'muddy')]
+```
+
+Most of these are exactly the point — `purchased`/`bought` and
+`vehicle`/`car` share no surface form at all, which is precisely what a
+stemmer or lemmatizer cannot find. Some are not great
+(`'She' -> 'He'`, `'global' -> 'climate'`): on a 16-sentence toy corpus
+there isn't enough context for a reliable vector, and pronoun/antonym/
+paradigm-class confusion (distributionally similar words with opposite or
+unrelated meanings) is a real, documented limitation of the method
+generally, on any corpus size, not a bug specific to this run — the `cannot_link`
+config option exists to suppress specific known-bad pairs once you've found
+them this way. This is exactly why `sample_merges()` exists: inspect before
+you trust.
+
+```python
+>>> reducer.cluster_stats()
+{'n_types': 101, 'n_clusters': 86, 'vocab_reduction_pct': 14.85,
+ 'n_clusters_gt1': 14, 'largest_cluster': 3, 'mean_merged_cluster_size': 2.07,
+ 'types_protected': 2, 'merges_blocked_by_linkage': 3,
+ 'merges_blocked_by_size_cap': 0, 'merges_blocked_by_protection': 0}
+
+>>> reducer.verify_guarantees()
+{'idempotent': True, 'representatives_are_fixed_points': True,
+ 'classes_are_closed': True, 'diameter_bound_holds': True}
+```
+
+### 3. Reduce text
+
+Inference never touches the encoder again — it's a dictionary lookup:
+
+```python
+>>> reducer.reduce("The physician purchased a vehicle.")
+'the physician bought a car .'
+
+>>> reducer.reduce_batch(["She bought a car.", "He examined the patient."])
+['He bought a car .', 'He examined the patient .']
+```
+
+(Output is whitespace-joined tokens, not re-detokenized prose — punctuation
+spacing like `car .` is expected.)
+
+### 4. Save and reload
+
+```python
+reducer.save("my_corpus.json")
+
+from semantic_reducer import SemanticReducer
+loaded = SemanticReducer.load("my_corpus.json")
+loaded.reduce("The physician purchased a vehicle.")
+# 'the physician bought a car .' -- identical to the original, no re-fitting
+```
+
+`save()` persists the config and the reduction map (and, with
+`include_vectors=True`, the type vectors and anisotropy correction needed for
+`assign_oov()` later). It does not persist the encoder itself — `load()` never
+downloads or loads a Transformer, which is why reloading is instant.
+
+### 5. Tune τ for your corpus
+
+`threshold` is not portable across corpora or across `anisotropy` settings.
+Sweep it:
+
+```python
+for tau in (0.45, 0.50, 0.55, 0.60, 0.65):
+    r = SemanticReducer(model_name="bert-base-multilingual-cased",
+                        threshold=tau, min_count=1, device="cpu")
+    r.fit(corpus)
+    stats = r.cluster_stats()
+    print(tau, stats["vocab_reduction_pct"], stats["n_clusters_gt1"])
+```
+
+Higher τ merges less but drifts less (Section "The linkage parameter"
+above); there is no universal correct value, only a tradeoff to inspect on
+your own data.
+
+---
+
+## What it does
+
+1. **Encodes words in context.** Every sentence is encoded whole, and a type
+   vector is the average of that word's occurrence vectors across the corpus —
+   not an embedding of the word in isolation.
+2. **Corrects anisotropy.** Transformer embeddings occupy a narrow cone, so the
+   cosine between two *unrelated* words is typically ~0.9. Without correction a
+   cosine threshold measures the cone, not meaning. Call `geometry_report()` to
+   see the before/after numbers for your own corpus.
+3. **Retrieves every pair above τ, exactly.** No `top_k` truncation, so the
+   similarity graph is a function of τ alone.
+4. **Agglomerates with a bounded-drift linkage rule** (see below).
+5. **Collapses each class to its most frequent member.** Never the shortest —
+   string length is an orthographic criterion and has no place in a semantic
+   method.
+
+Inference is a plain `dict` lookup: O(1) per token, no encoder loaded, and
+idempotent — `reduce(reduce(x)) == reduce(x)`.
+
+---
+
+## The linkage parameter
+
+Vocabulary reduction by embedding similarity has one dominant failure mode:
+**transitive semantic drift**. With plain connected components, `A~B` and `B~C`
+put A and C in one class even when A and C are unrelated, and chains of such
+merges can swallow a vocabulary.
+
+`linkage` (λ) controls exactly that. Two clusters merge only when at least a λ
+fraction of the pairs across them reach τ.
+
+| λ | Behaviour | Guarantee |
+|---|---|---|
+| `0.0` | Single linkage — merge on any qualifying edge | None; drift unbounded |
+| `1.0` *(default)* | Complete linkage — every cross pair must reach τ | **Every pair in a class has cosine ≥ τ, so cluster diameter ≤ 1 − τ** |
+| in between | Interpolates | Trades the bound for compression |
+
+At λ = 1 the bound follows by induction: singletons satisfy it trivially, and
+merging two clusters that satisfy it only when every cross pair also reaches τ
+preserves it. Every cluster is therefore a clique in the τ-graph. `drift_report()`
+verifies this on a fitted map, and `verify_guarantees()` checks all of the claimed
+properties at once.
+
+---
+
+## Diagnostics
+
+```python
+reducer.cluster_stats()      # sizes, compression, what merges were refused and why
+reducer.drift_report()       # tightest/loosest cluster, whether the bound holds
+reducer.geometry_report()    # mean cosine before and after anisotropy correction
+reducer.polysemy_report()    # the least consistently used types
+reducer.protection_report()  # counts of types held out, by rule
+reducer.sample_merges()      # qualitative spot-check
+reducer.verify_guarantees()  # idempotence, closure, diameter bound
+```
+
+`polysemy_report()` ranks types by the **mean resultant length** of their unit
+occurrence vectors, in [0, 1]. Low means a word's contexts pull its vector in
+many directions — the signature of polysemy, and a warning that collapsing it to
+one average discards a real distinction. Set `min_concentration` to keep such
+types out of merges.
+
+---
+
+## Configuration
+
+Every option lives in `ReducerConfig` and is saved alongside each artifact, so a
+map always records how it was built.
+
+```python
+from semantic_reducer import ReducerConfig, SemanticReducer
+
+config = ReducerConfig(
+    model_name="bert-base-multilingual-cased",
+    threshold=0.6,          # cosine cutoff, AFTER anisotropy correction
+    linkage=1.0,            # bounded drift by default
+    min_count=5,            # ignore types too rare to have a reliable vector
+    anisotropy=True,        # False is the ablation baseline
+    n_abtt=2,               # principal directions removed
+    device=None,            # None auto-selects CUDA -> MPS -> CPU
+)
+reducer = SemanticReducer(config)
+```
+
+Notable knobs: `layers` and `subword_pooling` (ablation axes), `max_cluster_size`,
+`protect` / `protect_pattern` / `protect_numerals`, `min_concentration`, `backend`,
+and `dtype`.
+
+**τ is not portable across settings.** Anisotropy correction shifts the whole
+similarity distribution downward, so a threshold tuned on uncorrected embeddings
+will merge almost nothing once correction is on. Sweep it on your corpus.
+
+---
+
+## Encoder choice and optional fine-tuning
+
+The encoder is loaded through HuggingFace's generic `AutoModel`/`AutoTokenizer`
+interface, so `model_name` accepts **any** HuggingFace-compatible encoder with a
+fast tokenizer — a Hub identifier, or a local path to a model you trained
+yourself. `bert-base-multilingual-cased` is the default, not a requirement.
+
+This matters most for a language with no suitable existing pretrained model: you
+are not locked out. Pretrain your own Transformer from scratch — self-supervised,
+on whatever raw text you have, no labels, no resource beyond the text itself —
+and point `model_name` at it. Everything above works unchanged.
+
+```python
+reducer = SemanticReducer(model_name="path/to/your/own/model")
+```
+
+An optional further stage continues that same self-supervised objective on the
+corpus being reduced itself, before any type vector is extracted, for a caller
+who wants the encoder adapted to their specific corpus:
+
+```python
+reducer = SemanticReducer(
+    model_name="bert-base-multilingual-cased",
+    finetune=True,
+    finetune_epochs=2,       # default 1
+    finetune_lr=5e-5,        # default
+)
+reducer.fit(corpus)
+reducer.finetune_report()   # per-epoch mean MLM loss
+```
+
+**This exists for accessibility, not performance — no benefit is claimed.**
+Every guarantee the method makes (idempotence, the diameter bound, closure over
+the corpus vocabulary) is validated to hold identically under fine-tuning. But a
+direct frozen-vs-fine-tuned comparison (Bangla Sentiment, two epochs) found no
+improvement on any intrinsic or downstream measure, at roughly 24× the fitting
+time — reported plainly rather than omitted. Use it when no suitable pretrained
+encoder exists at all, not as a way to improve results with one that already
+does.
+
+Requires the model to be loadable via `AutoModelForMaskedLM` (a masked-language-
+model architecture, e.g. BERT-family — not a causal/decoder-only model).
+
+---
+
+## Device support
+
+Auto-selects CUDA → MPS → CPU; override with `device="cpu"`, `"cuda:1"`, `"mps"`.
+Neighbour search runs on the same device via a chunked exact matmul, with
+`search_chunk` controlling peak memory. `dtype="float16"` roughly halves encoding
+time on CUDA; `float32` is the default because it is reproducible across hardware.
+
+FAISS is optional (`pip install semantic-reducer[faiss]`, then `backend="faiss"`).
+It is not required and not faster in the general case: `IndexFlatIP` is itself
+brute force, so it was only ever providing an optimized matrix multiply.
+
+---
+
+## Out-of-vocabulary words
+
+Unseen words pass through unchanged, which is what keeps inference free of the
+encoder. `assign_oov(words)` is the opt-in alternative — it loads the encoder, so
+inference is no longer O(1), and it encodes words *without context*, so those
+vectors are not comparable in kind to corpus-derived type vectors. Use it
+deliberately.
+
+---
+
+## Installation
+
+```bash
+pip install semantic-reducer
+```
+
+Requires Python ≥ 3.9, `torch`, `numpy`, `transformers`, `tqdm`.
+
+## Development
+
+```bash
+pip install -e ".[dev]"
+pytest tests/ -v
+```
+
+The clustering guarantees are tested without torch or transformers — they are
+imported lazily, so the algorithm can be exercised with numpy alone.
+
+## License
+
+MIT.

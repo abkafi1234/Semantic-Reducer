@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "semantic-reducer"
-version = "0.1.1"
+version = "0.4.0"
 authors = [
-  { name="Your Name", email="your.email@example.com" },
+  { name="Md Abdullah Al Kafi", email="kafi.cse@diu.edu.bd" },
 ]
-description = "O(1) semantic vocabulary reduction using BERT and FAISS."
+description = "Corpus-grounded semantic vocabulary reduction with bounded semantic drift."
 readme = "README.md"
 requires-python = ">=3.8"
 license = { text = "MIT License" }
@@ -26,18 +26,32 @@ classifiers = [
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Text Processing :: Linguistic",
 ]
 
-# The libraries installed automatically when someone pip installs your package
+# The libraries installed automatically when someone pip installs your package.
+# faiss is NOT required: neighbour search defaults to a chunked matmul in torch,
+# which is exact, runs on the same device as the encoder, and is mathematically
+# identical to IndexFlatIP (itself brute force, not an approximate index).
 dependencies = [
     "torch>=1.10.0",
     "numpy>=1.21.0",
-    "faiss-cpu>=1.7.0",
     "tqdm>=4.60.0",
-    "transformers>=4.20.0"
+    "transformers>=4.20.0",
+    # stdlib re's \w excludes Unicode combining marks (categories Mn/Mc/Me),
+    # which silently shreds words in Bengali, Devanagari, and every other
+    # script that writes vowels as marks attached to a base consonant. The
+    # `regex` module's \p{L}\p{M}\p{N} keeps them together. See encoder.py.
+    "regex>=2023.0.0",
 ]
+
+[project.optional-dependencies]
+faiss = ["faiss-cpu>=1.7.0"]
+dev = ["pytest>=7.0", "faiss-cpu>=1.7.0", "build"]
 
 # These links will appear on the left sidebar of your PyPI page
 [project.urls]
