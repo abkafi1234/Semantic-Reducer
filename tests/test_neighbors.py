@@ -15,7 +15,12 @@ from conftest import unit
 from semantic_reducer import find_edges
 from semantic_reducer.neighbors import resolve_backend
 
-BACKENDS = ["numpy", "torch"]
+BACKENDS = ["numpy"]
+try:  # optional dependency
+    import torch  # noqa: F401
+    BACKENDS.append("torch")
+except ImportError:
+    pass
 try:  # optional dependency
     import faiss  # noqa: F401
     BACKENDS.append("faiss")
